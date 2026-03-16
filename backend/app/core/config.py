@@ -1,0 +1,52 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import List
+
+
+class Settings(BaseSettings):
+    """Application settings."""
+
+    # API Settings
+    API_V1_PREFIX: str = "/api/v1"
+    PROJECT_NAME: str = "Masjid Administration System"
+    DEBUG: bool = False
+
+    # Database
+    DATABASE_URL: str
+
+    # Supabase
+    SUPABASE_URL: str
+    SUPABASE_KEY: str
+    SUPABASE_JWT_SECRET: str = ""
+    SUPABASE_SERVICE_ROLE_KEY: str = ""
+    SUPABASE_INVITE_REDIRECT_URL: str = ""
+
+    # Google OAuth
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+
+    # Security
+    SECRET_KEY: str
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+
+    # WhatsApp
+    WA_BASE_URL: str = "http://localhost:8005"
+    WA_USER: str = ""
+    WA_PASS: str = ""
+
+    # CORS
+    ALLOWED_ORIGINS: str = "http://localhost:3000"
+
+    @property
+    def origins_list(self) -> List[str]:
+        """Convert ALLOWED_ORIGINS string to list."""
+        return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",")]
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="ignore"
+    )
+
+
+settings = Settings()
