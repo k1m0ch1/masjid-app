@@ -22,6 +22,7 @@ const Finance = () => {
   ]
 
   const today = new Date()
+  const [centerDay, setCenterDay] = useState(today)
   const [selectedDate, setSelectedDate] = useState(today)
   const [transactions, setTransactions] = useState([])
   const [summary, setSummary] = useState({ total_income: 0, total_expense: 0, balance: 0 })
@@ -239,8 +240,8 @@ const Finance = () => {
     return !transaction.source_type || transaction.source_type === 'manual'
   }
 
-  // 7-day date strip
-  const dateStrip = [-3, -2, -1, 0, 1, 2, 3].map(offset => addDays(today, offset))
+  // 7-day date strip — centered on centerDay
+  const dateStrip = [-3, -2, -1, 0, 1, 2, 3].map(offset => addDays(centerDay, offset))
 
   return (
     <>
@@ -436,9 +437,22 @@ const Finance = () => {
             </button>
           ))}
         </div>
-        <p className="text-sm text-gray-500 mt-2">
-          Menampilkan transaksi: <span className="font-medium">{format(selectedDate, 'EEEE, dd MMMM yyyy', { locale: id })}</span>
-        </p>
+        <div className="flex flex-wrap items-center gap-2 mt-2">
+          <p className="text-sm text-gray-500">
+            Menampilkan transaksi: <span className="font-medium">{format(selectedDate, 'EEEE, dd MMMM yyyy', { locale: id })}</span>
+          </p>
+          <input
+            type="date"
+            value={format(centerDay, 'yyyy-MM-dd')}
+            onChange={(e) => {
+              if (!e.target.value) return
+              const newCenter = new Date(e.target.value + 'T00:00:00')
+              setCenterDay(newCenter)
+              handleDateChange(newCenter)
+            }}
+            className="px-2 py-1 text-xs border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-gray-600"
+          />
+        </div>
       </div>
 
       {/* Filter Tabs */}

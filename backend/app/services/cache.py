@@ -34,8 +34,8 @@ def _make_client():
         password=settings.REDIS_PASSWORD or None,
         db=settings.REDIS_DB,
         decode_responses=True,
-        socket_connect_timeout=2,
-        socket_timeout=2,
+        socket_connect_timeout=5,
+        socket_timeout=10,  # Must be >= blpop timeout (5s) + buffer
     )
 
 
