@@ -1,6 +1,7 @@
 import httpx
 import asyncio
 import base64
+import random
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -25,8 +26,9 @@ WA_AUTH = (settings.WA_USER, settings.WA_PASS)
 
 class QueueCreate(BaseModel):
     event_id: Optional[UUID] = None
-    recipient_type: str          # "personal" | "group"
-    recipient: str               # phone@s.whatsapp.net or JID@g.us
+    tag_id: Optional[UUID] = None  # If provided, send to all jamaah with this tag
+    recipient_type: Optional[str] = None  # "personal" | "group" (optional if tag_id provided)
+    recipient: Optional[str] = None       # phone@s.whatsapp.net or JID@g.us (optional if tag_id provided)
     recipient_name: Optional[str] = None
     message_type: str = "text"  # "text" | "image"
     message: Optional[str] = None
@@ -110,7 +112,12 @@ async def _send_immediate(entry_id: UUID):
 # ── Background scheduler ──────────────────────────────────────────────────────
 
 async def run_scheduler():
-    """Runs every 30 seconds, processes due pending messages."""
+    """
+    Runs every 30 seconds, processes due pending messages.
+
+    Messages are processed sequentially with random delay (1-3 seconds) between each,
+    ensuring last person gets message last (no parallel processing).
+    """
     while True:
         await asyncio.sleep(30)
         try:
@@ -119,9 +126,17 @@ async def run_scheduler():
             pending = db.query(MessageQueue).filter(
                 MessageQueue.status == "pending",
                 (MessageQueue.scheduled_at == None) | (MessageQueue.scheduled_at <= now),
-            ).limit(20).all()
-            for entry in pending:
+            ).order_by(MessageQueue.created_at).limit(20).all()  # Order by creation time
+
+            for i, entry in enumerate(pending):
                 await _process_queue_entry(entry, db)
+
+                # Add random delay between messages (1-3 seconds)
+                # Skip delay after last message
+                if i < len(pending) - 1:
+                    delay = random.uniform(1.0, 3.0)
+                    await asyncio.sleep(delay)
+
             db.close()
         except Exception:
             pass  # don't crash the scheduler
@@ -143,12 +158,93 @@ async def get_groups(current_user: User = Depends(require_module("pesan_kirim"))
             raise HTTPException(status_code=503, detail=f"WA API tidak tersedia: {e}")
 
 
-@router.post("/whatsapp/queue", response_model=QueueResponse, status_code=201)
+@router.post("/whatsapp/queue", status_code=201)
 async def create_queue(
     payload: QueueCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_module("pesan_kirim")),
 ):
+    """
+    Create message queue entry/entries.
+
+    If tag_id is provided:
+      - Creates multiple queue entries (one per jamaah with that tag)
+      - Returns {"count": N, "message": "..."}
+
+    If tag_id is None:
+      - Creates single queue entry
+      - Returns QueueResponse
+    """
+    from app.models.jamaah import Jamaah
+
+    # Bulk mode: send to all jamaah with tag
+    if payload.tag_id:
+        # Query all jamaah with this tag
+        jamaah_list = db.query(Jamaah).filter(
+            Jamaah.tags.any(id=payload.tag_id)
+        ).all()
+
+        if not jamaah_list:
+            raise HTTPException(status_code=404, detail="Tidak ada jamaah dengan tag ini")
+
+        # Format phone: 08xxx → 628xxx
+        def format_phone(phone: str) -> str:
+            if not phone:
+                return None
+            clean = phone.strip()
+            if clean.startswith('08'):
+                return '628' + clean[2:]
+            if clean.startswith('8'):
+                return '628' + clean[1:]
+            if clean.startswith('628'):
+                return clean
+            return clean
+
+        # Create queue entries for each jamaah
+        created_count = 0
+        for jamaah in jamaah_list:
+            if not jamaah.phone:
+                continue  # Skip jamaah without phone
+
+            formatted_phone = format_phone(jamaah.phone)
+            if not formatted_phone:
+                continue
+
+            entry = MessageQueue(
+                event_id=payload.event_id,
+                recipient_type="personal",
+                recipient=formatted_phone + "@s.whatsapp.net",
+                recipient_name=jamaah.full_name,
+                message_type=payload.message_type,
+                message=payload.message,
+                image_url=payload.image_url,
+                caption=payload.caption,
+                send_now=payload.send_now,
+                scheduled_at=payload.scheduled_at if not payload.send_now else None,
+                status="pending",
+            )
+            db.add(entry)
+            created_count += 1
+
+        if created_count == 0:
+            raise HTTPException(status_code=400, detail="Tidak ada jamaah dengan nomor telepon valid")
+
+        db.commit()
+
+        # Note: Don't trigger immediate send for bulk mode
+        # Let scheduler handle with proper delays (1-3 sec between messages)
+
+        return {
+            "count": created_count,
+            "message": f"{created_count} pesan berhasil ditambahkan ke antrean"
+        }
+
+    # Single mode: normal queue creation
+    if not payload.recipient:
+        raise HTTPException(status_code=400, detail="recipient harus diisi jika tag_id tidak digunakan")
+    if not payload.recipient_type:
+        raise HTTPException(status_code=400, detail="recipient_type harus diisi jika tag_id tidak digunakan")
+
     entry = MessageQueue(
         event_id=payload.event_id,
         recipient_type=payload.recipient_type,

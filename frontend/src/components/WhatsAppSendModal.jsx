@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
-import { X, Search, MessageCircle, Users, Phone, Image, Clock, Send } from 'lucide-react'
-import { whatsappAPI } from '../services/api'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { X, Search, MessageCircle, Users, Phone, Image, Clock, Send, UserSearch, Tag as TagIcon } from 'lucide-react'
+import { whatsappAPI, jamaahAPI } from '../services/api'
+import { getCachedJamaah, setCachedJamaah } from '../utils/jamaahCache'
 
 const WhatsAppSendModal = ({ isOpen, onClose, event = null }) => {
   const [step, setStep] = useState('target')   // target | compose
@@ -8,6 +9,19 @@ const WhatsAppSendModal = ({ isOpen, onClose, event = null }) => {
 
   // Personal
   const [phone, setPhone] = useState('')
+  const [recipientName, setRecipientName] = useState('')
+
+  // Jamaah Search
+  const [showJamaahSearch, setShowJamaahSearch] = useState(false)
+  const [jamaahList, setJamaahList] = useState([])
+  const [jamaahLoading, setJamaahLoading] = useState(false)
+  const [jamaahSearchText, setJamaahSearchText] = useState('')
+
+  // Tag Selection
+  const [useTag, setUseTag] = useState(false)
+  const [tags, setTags] = useState([])
+  const [tagSearchText, setTagSearchText] = useState('')
+  const [selectedTag, setSelectedTag] = useState(null)
 
   // Group
   const [groups, setGroups] = useState([])
@@ -39,6 +53,31 @@ const WhatsAppSendModal = ({ isOpen, onClose, event = null }) => {
     wedding: 'Pernikahan', funeral: 'Pemakaman', meeting: 'Rapat',
     cleaning: 'Kerja Bakti', renovation: 'Renovasi', other: 'Kegiatan',
   }
+
+  // Fetch jamaah & tags on mount
+  useEffect(() => {
+    if (isOpen) {
+      // Check cache first
+      const cached = getCachedJamaah()
+      if (cached) {
+        setJamaahList(cached)
+      } else {
+        // Fetch from API if no cache
+        setJamaahLoading(true)
+        jamaahAPI.list({ limit: 500 })
+          .then(res => {
+            setJamaahList(res.data)
+            setCachedJamaah(res.data) // Cache for 10 minutes
+          })
+          .catch(err => console.error('Failed to load jamaah:', err))
+          .finally(() => setJamaahLoading(false))
+      }
+
+      jamaahAPI.listTags()
+        .then(res => setTags(res.data))
+        .catch(err => console.error('Failed to load tags:', err))
+    }
+  }, [isOpen])
 
   // Pre-fill message from event
   useEffect(() => {
@@ -88,6 +127,12 @@ const WhatsAppSendModal = ({ isOpen, onClose, event = null }) => {
       setStep('target')
       setRecipientType('personal')
       setPhone('')
+      setRecipientName('')
+      setUseTag(false)
+      setSelectedTag(null)
+      setTagSearchText('')
+      setJamaahSearchText('')
+      setShowJamaahSearch(false)
       setGroupSearch('')
       setSelectedGroup(null)
       setGroups([])
@@ -144,8 +189,62 @@ const WhatsAppSendModal = ({ isOpen, onClose, event = null }) => {
     return () => document.removeEventListener('mousedown', h)
   }, [])
 
+  // Filter jamaah by search
+  const filteredJamaah = useMemo(() => {
+    if (!jamaahSearchText.trim()) return jamaahList
+    const searchLower = jamaahSearchText.toLowerCase()
+    return jamaahList.filter(j =>
+      j.full_name?.toLowerCase().includes(searchLower) ||
+      j.phone?.toLowerCase().includes(searchLower)
+    )
+  }, [jamaahList, jamaahSearchText])
+
+  // Filter tags by search
+  const filteredTags = useMemo(() => {
+    if (!tagSearchText.trim()) return tags
+    const searchLower = tagSearchText.toLowerCase()
+    return tags.filter(t => t.name.toLowerCase().includes(searchLower))
+  }, [tags, tagSearchText])
+
+  // Tag member count
+  const tagMemberCount = useMemo(() => {
+    if (!selectedTag) return 0
+    return jamaahList.filter(j => j.tags?.some(t => t.id === selectedTag.id)).length
+  }, [selectedTag, jamaahList])
+
+  // Format phone: 08xxx → 628xxx
+  const formatPhone = (phone) => {
+    if (!phone) return ''
+    const clean = phone.replace(/\D/g, '')
+    if (clean.startsWith('08')) {
+      return '628' + clean.slice(2)
+    }
+    if (clean.startsWith('8')) {
+      return '628' + clean.slice(1)
+    }
+    return clean
+  }
+
+  // Handle select jamaah
+  const handleSelectJamaah = (jamaah) => {
+    const formatted = formatPhone(jamaah.phone)
+    setPhone(formatted)
+    setRecipientName(jamaah.full_name || '')
+    setShowJamaahSearch(false)
+    setJamaahSearchText('')
+  }
+
+  // Handle select tag
+  const handleSelectTag = (tag) => {
+    setSelectedTag(tag)
+    setTagSearchText(tag.name)
+  }
+
   const canProceedTarget = () => {
-    if (recipientType === 'personal') return phone.trim().length >= 8
+    if (recipientType === 'personal') {
+      if (useTag) return !!selectedTag
+      return phone.trim().length >= 8
+    }
     return !!selectedGroup
   }
 
@@ -153,20 +252,6 @@ const WhatsAppSendModal = ({ isOpen, onClose, event = null }) => {
     setError(null)
     setSubmitting(true)
     try {
-      let recipient = ''
-      let recipientName = ''
-      if (recipientType === 'personal') {
-        // Normalize: remove leading 0, add 62
-        let num = phone.trim().replace(/\D/g, '')
-        if (num.startsWith('0')) num = '62' + num.slice(1)
-        else if (!num.startsWith('62')) num = '62' + num
-        recipient = num + '@s.whatsapp.net'
-        recipientName = phone.trim()
-      } else {
-        recipient = selectedGroup.JID
-        recipientName = selectedGroup.Name
-      }
-
       let scheduledAt = null
       if (sendWhen === 'later') {
         if (!scheduledDate || !scheduledTime) {
@@ -177,11 +262,39 @@ const WhatsAppSendModal = ({ isOpen, onClose, event = null }) => {
         scheduledAt = new Date(`${scheduledDate}T${scheduledTime}:00`).toISOString()
       }
 
+      // Mode: Tag-based bulk send
+      if (recipientType === 'personal' && useTag && selectedTag) {
+        await whatsappAPI.createQueue({
+          event_id: event?.id || null,
+          tag_id: selectedTag.id,
+          message_type: messageType,
+          message: messageType === 'text' ? message : null,
+          image_url: messageType === 'image' ? imageUrl : null,
+          caption: messageType === 'image' ? caption : null,
+          send_now: sendWhen === 'now',
+          scheduled_at: scheduledAt,
+        })
+        onClose()
+        alert(`${tagMemberCount} pesan ${sendWhen === 'now' ? 'sedang dikirim' : 'dijadwalkan'}!`)
+        return
+      }
+
+      // Mode: Single personal or group
+      let recipient = ''
+      let recipientNameDisplay = ''
+      if (recipientType === 'personal') {
+        recipient = phone.trim() + '@s.whatsapp.net'
+        recipientNameDisplay = recipientName || phone.trim()
+      } else {
+        recipient = selectedGroup.JID
+        recipientNameDisplay = selectedGroup.Name
+      }
+
       await whatsappAPI.createQueue({
         event_id: event?.id || null,
         recipient_type: recipientType,
         recipient,
-        recipient_name: recipientName,
+        recipient_name: recipientNameDisplay,
         message_type: messageType,
         message: messageType === 'text' ? message : null,
         image_url: messageType === 'image' ? imageUrl : null,
@@ -257,16 +370,124 @@ const WhatsAppSendModal = ({ isOpen, onClose, event = null }) => {
 
             {/* Personal input */}
             {recipientType === 'personal' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nomor WhatsApp</label>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={e => setPhone(e.target.value)}
-                  placeholder="Contoh: 08123456789"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
-                />
-                <p className="text-xs text-gray-400 mt-1">Format: 08xx atau 628xx</p>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nomor WhatsApp</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="tel"
+                      value={phone}
+                      onChange={e => setPhone(formatPhone(e.target.value))}
+                      disabled={useTag}
+                      placeholder="628123456789"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowJamaahSearch(true)}
+                      disabled={useTag}
+                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-1 text-sm flex-shrink-0"
+                    >
+                      <UserSearch className="h-4 w-4" />
+                      Cari
+                    </button>
+                  </div>
+                  {recipientName && !useTag && (
+                    <p className="text-xs text-gray-500 mt-1">Kepada: {recipientName}</p>
+                  )}
+                </div>
+
+                {/* Use Tag Toggle */}
+                <div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useTag}
+                      onChange={(e) => {
+                        setUseTag(e.target.checked)
+                        if (!e.target.checked) {
+                          setSelectedTag(null)
+                          setTagSearchText('')
+                        }
+                      }}
+                      className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                    />
+                    <span className="text-sm font-medium text-gray-700">Gunakan Tag</span>
+                  </label>
+                </div>
+
+                {/* Tag Autocomplete */}
+                {useTag && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Pilih Tag</label>
+                    <div className="relative">
+                      <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg bg-white">
+                        <TagIcon className="h-4 w-4 text-gray-400" />
+                        <input
+                          type="text"
+                          value={tagSearchText}
+                          onChange={(e) => {
+                            setTagSearchText(e.target.value)
+                            setSelectedTag(null)
+                          }}
+                          placeholder="Ketik untuk mencari tag..."
+                          className="flex-1 outline-none text-sm"
+                        />
+                        {selectedTag && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedTag(null)
+                              setTagSearchText('')
+                            }}
+                            className="text-gray-400 hover:text-gray-600"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Tag dropdown */}
+                      {!selectedTag && tagSearchText && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                          {filteredTags.length === 0 ? (
+                            <div className="p-3 text-sm text-gray-500 text-center">
+                              Tag tidak ditemukan
+                            </div>
+                          ) : (
+                            filteredTags.map(tag => (
+                              <button
+                                key={tag.id}
+                                type="button"
+                                onClick={() => handleSelectTag(tag)}
+                                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2"
+                              >
+                                <TagIcon className="h-3 w-3 text-gray-400" />
+                                <span className="font-medium text-gray-700">{tag.name}</span>
+                                {tag.color && (
+                                  <span
+                                    className="w-3 h-3 rounded-full ml-auto"
+                                    style={{ backgroundColor: tag.color }}
+                                  />
+                                )}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Tag member count */}
+                    {selectedTag && (
+                      <div className="mt-2 flex items-center gap-2 text-sm text-gray-600 bg-blue-50 px-3 py-2 rounded-lg">
+                        <Users className="h-4 w-4 text-blue-600" />
+                        <span className="font-medium">
+                          {tagMemberCount} orang akan menerima pesan ini
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -415,7 +636,11 @@ const WhatsAppSendModal = ({ isOpen, onClose, event = null }) => {
             </button>
             <button
               onClick={handleSubmit}
-              disabled={submitting || !canProceedTarget() || (messageType === 'text' ? !message.trim() : !imageUrl.trim())}
+              disabled={
+                submitting ||
+                !canProceedTarget() ||
+                (messageType === 'text' ? !message.trim() : !imageUrl.trim())
+              }
               className="flex-1 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors flex items-center justify-center gap-2"
             >
               {submitting ? (
@@ -427,6 +652,75 @@ const WhatsAppSendModal = ({ isOpen, onClose, event = null }) => {
           </div>
         </div>
       </div>
+
+      {/* Jamaah Search Modal */}
+      {showJamaahSearch && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[60]">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[80vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Search className="h-5 w-5 text-gray-400" />
+                Cari Jamaah
+              </h3>
+              <button
+                onClick={() => {
+                  setShowJamaahSearch(false)
+                  setJamaahSearchText('')
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Search Input */}
+            <div className="p-4 border-b border-gray-200">
+              <input
+                type="text"
+                value={jamaahSearchText}
+                onChange={(e) => setJamaahSearchText(e.target.value)}
+                placeholder="Cari nama atau nomor..."
+                autoFocus
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm"
+              />
+            </div>
+
+            {/* Results */}
+            <div className="flex-1 overflow-y-auto p-2">
+              {jamaahLoading ? (
+                <div className="p-8 text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-3" />
+                  <p className="text-sm text-gray-500">Memuat data jamaah...</p>
+                </div>
+              ) : filteredJamaah.length === 0 ? (
+                <div className="p-8 text-center text-gray-500 text-sm">
+                  {jamaahSearchText ? 'Tidak ada hasil' : 'Ketik untuk mencari'}
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {filteredJamaah.slice(0, 50).map(jamaah => (
+                    <button
+                      key={jamaah.id}
+                      onClick={() => handleSelectJamaah(jamaah)}
+                      className="w-full px-3 py-2 text-left rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      <p className="font-medium text-gray-900 text-sm">
+                        {jamaah.full_name}
+                      </p>
+                      {jamaah.phone && (
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {jamaah.phone}
+                        </p>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

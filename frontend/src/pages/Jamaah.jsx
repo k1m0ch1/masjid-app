@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Plus, Search, Edit, Trash2, Phone, Briefcase, RefreshCw, Tag } from 'lucide-react'
 import JamaahModal from '../components/JamaahModal'
 import { jamaahAPI } from '../services/api'
+import { getCachedJamaah, setCachedJamaah } from '../utils/jamaahCache'
 const INITIAL_VISIBLE_JAMAAH = 16
 const LOAD_MORE_JAMAAH = 12
 
@@ -21,9 +22,18 @@ const Jamaah = () => {
     setLoading(true)
     setError(null)
     try {
+      // Check cache first
+      const cached = getCachedJamaah()
+      if (cached) {
+        setJamaahList(cached)
+        setLoading(false)
+        return
+      }
+
       // Load all jamaah once, no filters (let client-side handle filtering)
       const res = await jamaahAPI.list({ limit: 500 })
       setJamaahList(res.data)
+      setCachedJamaah(res.data) // Cache for 10 minutes
     } catch (err) {
       setError('Gagal memuat data jamaah. Pastikan backend berjalan.')
       console.error(err)

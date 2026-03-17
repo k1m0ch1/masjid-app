@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { RefreshCw, CheckCircle, Clock, XCircle, AlertCircle, Trash2, RotateCcw, MessageCircle, Users, Phone, Image } from 'lucide-react'
 import { whatsappAPI } from '../services/api'
+import WhatsAppSendForm from '../components/WhatsAppSendForm'
 
 const STATUS_META = {
   pending:    { label: 'Menunggu',    color: 'bg-yellow-100 text-yellow-700', icon: Clock },
@@ -78,6 +79,11 @@ export default function PesanKirim() {
         <button onClick={fetchQueue} className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors">
           <RefreshCw className="h-4 w-4" />
         </button>
+      </div>
+
+      {/* Send Form */}
+      <div className="mb-6">
+        <WhatsAppSendForm onMessageSent={fetchQueue} />
       </div>
 
       {/* Summary cards */}

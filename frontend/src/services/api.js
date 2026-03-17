@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { supabase } from './supabase'
+import { invalidateJamaahCache } from '../utils/jamaahCache'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
@@ -123,13 +124,25 @@ export const userAccessAPI = {
   },
 }
 
-// Jamaah API
+// Jamaah API (with cache invalidation)
 export const jamaahAPI = {
   list: (params) => api.get('/jamaah', { params }),
-  create: (data) => api.post('/jamaah', data),
+  create: async (data) => {
+    const result = await api.post('/jamaah', data)
+    invalidateJamaahCache() // Invalidate cache on create
+    return result
+  },
   get: (id) => api.get(`/jamaah/${id}`),
-  update: (id, data) => api.put(`/jamaah/${id}`, data),
-  delete: (id) => api.delete(`/jamaah/${id}`),
+  update: async (id, data) => {
+    const result = await api.put(`/jamaah/${id}`, data)
+    invalidateJamaahCache() // Invalidate cache on update
+    return result
+  },
+  delete: async (id) => {
+    const result = await api.delete(`/jamaah/${id}`)
+    invalidateJamaahCache() // Invalidate cache on delete
+    return result
+  },
   // Tags
   listTags: () => api.get('/jamaah/tags'),
   createTag: (data) => api.post('/jamaah/tags', data),
