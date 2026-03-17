@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     WA_USER: str = ""
     WA_PASS: str = ""
 
+    # Cloudflare R2 (S3-compatible storage)
+    R2_ACCOUNT_ID: str = ""
+    R2_ACCESS_KEY_ID: str = ""
+    R2_SECRET_ACCESS_KEY: str = ""
+    R2_BUCKET_NAME: str = "masjid-app"
+    R2_PUBLIC_URL: str = ""  # e.g. https://pub-xxx.r2.dev or custom domain
+
     # CORS
     ALLOWED_ORIGINS: str = "http://localhost:3000"
 

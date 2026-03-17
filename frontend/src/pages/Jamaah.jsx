@@ -1,20 +1,18 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Search, Edit, Trash2, Phone, Mail, MapPin, Briefcase, GraduationCap, RefreshCw } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Phone, Briefcase, RefreshCw, Tag } from 'lucide-react'
 import JamaahModal from '../components/JamaahModal'
-import ZakatFitrahTab from '../components/ZakatFitrahTab'
 import { jamaahAPI } from '../services/api'
-
-const TABS = ['Data Jamaah', 'Zakat Fitrah']
 const INITIAL_VISIBLE_JAMAAH = 16
 const LOAD_MORE_JAMAAH = 12
 
 const Jamaah = () => {
-  const [activeTab, setActiveTab] = useState('Data Jamaah')
   const [jamaahList, setJamaahList] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('all')
+  const [tagFilter, setTagFilter] = useState('all')
+  const [allTags, setAllTags] = useState([])
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedJamaah, setSelectedJamaah] = useState(null)
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_JAMAAH)
@@ -26,6 +24,7 @@ const Jamaah = () => {
     try {
       const params = { search: search || undefined, limit: 500 }
       if (roleFilter !== 'all') params.role = roleFilter
+      if (tagFilter !== 'all') params.tag_id = tagFilter
       const res = await jamaahAPI.list(params)
       setJamaahList(res.data)
     } catch (err) {
@@ -34,11 +33,15 @@ const Jamaah = () => {
     } finally {
       setLoading(false)
     }
-  }, [search, roleFilter])
+  }, [search, roleFilter, tagFilter])
 
   useEffect(() => {
     fetchJamaah()
   }, [fetchJamaah])
+
+  useEffect(() => {
+    jamaahAPI.listTags().then(r => setAllTags(r.data)).catch(() => {})
+  }, [])
 
   const handleAdd = () => {
     setSelectedJamaah(null)
@@ -130,42 +133,18 @@ const Jamaah = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Jamaah</h1>
-          <p className="text-sm text-gray-500 mt-1">Kelola data jamaah, SDM, dan zakat fitrah</p>
+          <p className="text-sm text-gray-500 mt-1">Kelola data jamaah dan SDM masjid</p>
         </div>
-        {activeTab === 'Data Jamaah' && (
-          <button
+        <button
             onClick={handleAdd}
             className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
           >
             <Plus className="h-4 w-4" />
             <span>Tambah Jamaah</span>
           </button>
-        )}
       </div>
 
-      {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="flex gap-1">
-          {TABS.map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors ${
-                activeTab === tab
-                  ? 'bg-white border border-b-white border-gray-200 -mb-px text-green-700'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
-        </nav>
-      </div>
-
-      {/* ── Tab: Data Jamaah ── */}
-      {activeTab === 'Data Jamaah' && (
-        <>
-          {/* Stats */}
+      {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
               { label: 'Total Jamaah', value: stats.total, color: 'text-gray-900' },
@@ -227,6 +206,37 @@ const Jamaah = () => {
                 </button>
               ))}
             </div>
+
+            {/* Tag filter chips */}
+            {allTags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 items-center">
+                <Tag className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                <button
+                  onClick={() => setTagFilter('all')}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-all border-2 ${
+                    tagFilter === 'all'
+                      ? 'bg-gray-700 text-white border-current'
+                      : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  Semua Tag
+                </button>
+                {allTags.map(tag => (
+                  <button
+                    key={tag.id}
+                    onClick={() => setTagFilter(tagFilter === tag.id ? 'all' : tag.id)}
+                    className="px-3 py-1 rounded-full text-xs font-medium transition-all border-2"
+                    style={
+                      tagFilter === tag.id
+                        ? { backgroundColor: tag.color, borderColor: tag.color, color: '#fff' }
+                        : { backgroundColor: '#fff', color: '#6b7280', borderColor: '#e5e7eb' }
+                    }
+                  >
+                    {tag.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* List */}
@@ -301,6 +311,22 @@ const Jamaah = () => {
                           )}
                         </div>
                       )}
+                      {jamaah.tags && jamaah.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-0.5">
+                          {jamaah.tags.slice(0, 2).map(tag => (
+                            <span
+                              key={tag.id}
+                              className="px-1.5 py-0.5 rounded text-xs font-medium text-white"
+                              style={{ backgroundColor: tag.color }}
+                            >
+                              {tag.name}
+                            </span>
+                          ))}
+                          {jamaah.tags.length > 2 && (
+                            <span className="px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded text-xs">+{jamaah.tags.length - 2}</span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Actions */}
@@ -339,13 +365,6 @@ const Jamaah = () => {
               </div>
             )}
           </div>
-        </>
-      )}
-
-      {/* ── Tab: Zakat Fitrah ── */}
-      {activeTab === 'Zakat Fitrah' && (
-        <ZakatFitrahTab jamaahList={jamaahList} />
-      )}
 
       <JamaahModal
         isOpen={isModalOpen}

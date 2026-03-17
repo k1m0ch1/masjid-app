@@ -281,7 +281,7 @@ const FinanceModal = ({ isOpen, onClose, onSubmit, transaction = null }) => {
                     name="donor_name"
                     value={formData.donor_name}
                     onChange={handleChange}
-                    placeholder="Opsional - kosongkan jika anonim"
+                    placeholder="Opsional - kosongkan jika Hamba Allah"
                     disabled={formData.is_anonymous}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
                   />
@@ -295,7 +295,7 @@ const FinanceModal = ({ isOpen, onClose, onSubmit, transaction = null }) => {
                       className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
                     />
                     <label htmlFor="is_anonymous" className="text-sm text-gray-700">
-                      Donatur Anonim
+                      Donatur Hamba Allah
                     </label>
                   </div>
                 </div>

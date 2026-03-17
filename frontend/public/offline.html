@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Offline — MasjidApp</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+      text-align: center;
+    }
+    .icon {
+      font-size: 64px;
+      margin-bottom: 24px;
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #0f172a;
+    }
+    p {
+      font-size: 15px;
+      color: #64748b;
+      line-height: 1.6;
+      max-width: 300px;
+      margin-bottom: 32px;
+    }
+    button {
+      background: #16a34a;
+      color: white;
+      border: none;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:active { opacity: 0.85; }
+    .hint {
+      margin-top: 24px;
+      font-size: 13px;
+      color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+  <div class="icon">🕌</div>
+  <h1>Tidak ada koneksi</h1>
+  <p>Perangkat kamu sedang offline. Data yang sudah di-cache sebelumnya masih bisa diakses.</p>
+  <button onclick="window.location.reload()">Coba lagi</button>
+  <p class="hint">Data jamaah, keuangan, dan kegiatan yang pernah dibuka<br>masih tersedia secara offline.</p>
+</body>
+</html>

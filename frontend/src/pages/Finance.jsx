@@ -4,10 +4,23 @@ import { id } from 'date-fns/locale'
 import { Plus, TrendingUp, TrendingDown, Calendar, Edit2, Trash2, RefreshCw, Download, ChevronDown, FileText, Paperclip } from 'lucide-react'
 import { transactionAPI } from '../services/api'
 import FinanceModal from '../components/FinanceModal'
+import Ziswaf from './Ziswaf'
+import ZakatFitrahTab from '../components/ZakatFitrahTab'
+import useAuthStore from '../stores/useAuthStore'
 
 const PAGE_SIZE = 15
 
 const Finance = () => {
+  const { user } = useAuthStore()
+  const allowedModules = user?.allowed_modules || []
+  const [activeMainTab, setActiveMainTab] = useState('keuangan')
+
+  const mainTabs = [
+    { key: 'keuangan', label: 'Keuangan' },
+    ...(allowedModules.includes('ziswaf') ? [{ key: 'ziswaf', label: 'ZISWAF' }] : []),
+    { key: 'zakat_fitrah', label: 'Zakat Fitrah' },
+  ]
+
   const today = new Date()
   const [selectedDate, setSelectedDate] = useState(today)
   const [transactions, setTransactions] = useState([])
@@ -230,7 +243,38 @@ const Finance = () => {
   const dateStrip = [-3, -2, -1, 0, 1, 2, 3].map(offset => addDays(today, offset))
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+    <>
+      {/* Tab Navigation */}
+      <div className="max-w-7xl mx-auto px-4 pt-6">
+        <div className="mb-6 border-b border-gray-200">
+          <nav className="flex gap-1">
+            {mainTabs.map(tab => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveMainTab(tab.key)}
+                className={`px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors ${
+                  activeMainTab === tab.key
+                    ? 'bg-white border border-b-white border-gray-200 -mb-px text-green-700'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+      </div>
+
+      {activeMainTab === 'ziswaf' && <Ziswaf />}
+      {activeMainTab === 'zakat_fitrah' && (
+        <div className="max-w-7xl mx-auto px-4 pb-6">
+          <ZakatFitrahTab />
+        </div>
+      )}
+
+      {activeMainTab === 'keuangan' && (
+    <div className="max-w-7xl mx-auto px-4 pb-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -464,7 +508,7 @@ const Finance = () => {
                             )}
                             {transaction.is_anonymous && (
                               <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
-                                Anonim
+                                Hamba Allah
                               </span>
                             )}
                           </div>
@@ -555,6 +599,8 @@ const Finance = () => {
         transaction={selectedTransaction}
       />
     </div>
+      )}
+    </>
   )
 }
 

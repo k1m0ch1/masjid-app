@@ -9,9 +9,18 @@ const getErrorMessage = (error) => {
   return error?.message || 'Terjadi kesalahan saat login.'
 }
 
+const SESSION_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000 // 1 minggu
+
 const clearAuthStorage = () => {
   localStorage.removeItem('access_token')
   localStorage.removeItem('user')
+  localStorage.removeItem('last_login_at')
+}
+
+const isSessionExpired = () => {
+  const lastLogin = localStorage.getItem('last_login_at')
+  if (!lastLogin) return true
+  return Date.now() - parseInt(lastLogin) > SESSION_TIMEOUT_MS
 }
 
 const useAuthStore = create((set) => ({
@@ -45,6 +54,16 @@ const useAuthStore = create((set) => ({
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && session) {
+        // Cek session timeout 1 minggu
+        if (event === 'INITIAL_SESSION' && isSessionExpired()) {
+          await supabase.auth.signOut()
+          clearAuthStorage()
+          set({ session: null, user: null, authError: 'Sesi berakhir. Silakan login kembali.', loading: false })
+          return
+        }
+        if (event === 'SIGNED_IN') {
+          localStorage.setItem('last_login_at', Date.now().toString())
+        }
         await handleSession(session)
       } else if (event === 'INITIAL_SESSION' && !session) {
         set({ loading: false })

@@ -1,5 +1,5 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { Home, Users, DollarSign, Calendar, Menu, LogOut, Heart, MessageCircle, Settings } from 'lucide-react'
+import { Home, Users, DollarSign, Calendar, Menu, LogOut, Settings } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import useAuthStore from '../stores/useAuthStore'
 
@@ -18,10 +18,8 @@ const Layout = () => {
     () => [
       { path: '/', icon: Home, label: 'Beranda', module: 'dashboard' },
       { path: '/jamaah', icon: Users, label: 'Jamaah', module: 'jamaah' },
-      { path: '/ziswaf', icon: Heart, label: 'ZISWAF', module: 'ziswaf' },
       { path: '/finance', icon: DollarSign, label: 'Keuangan', module: 'finance' },
       { path: '/events', icon: Calendar, label: 'Kegiatan', module: 'events' },
-      { path: '/pesan-kirim', icon: MessageCircle, label: 'Pesan', module: 'pesan_kirim' },
       { path: '/setting', icon: Settings, label: 'Pengaturan', module: 'setting' },
     ],
     []

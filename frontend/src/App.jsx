@@ -8,8 +8,6 @@ import Dashboard from './pages/Dashboard'
 import Jamaah from './pages/Jamaah'
 import Finance from './pages/Finance'
 import Events from './pages/Events'
-import Ziswaf from './pages/Ziswaf'
-import PesanKirim from './pages/PesanKirim'
 import Setting from './pages/Setting'
 import AccessDenied from './pages/AccessDenied'
 import Layout from './components/Layout'
@@ -99,22 +97,8 @@ function App() {
               </ModuleRoute>
             }
           />
-          <Route
-            path="ziswaf"
-            element={
-              <ModuleRoute moduleKey="ziswaf">
-                <Ziswaf />
-              </ModuleRoute>
-            }
-          />
-          <Route
-            path="pesan-kirim"
-            element={
-              <ModuleRoute moduleKey="pesan_kirim">
-                <PesanKirim />
-              </ModuleRoute>
-            }
-          />
+          <Route path="ziswaf" element={<Navigate to="/finance" replace />} />
+          <Route path="pesan-kirim" element={<Navigate to="/setting" replace />} />
           <Route
             path="setting"
             element={

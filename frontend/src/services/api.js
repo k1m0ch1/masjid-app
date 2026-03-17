@@ -98,6 +98,11 @@ export const jamaahAPI = {
   get: (id) => api.get(`/jamaah/${id}`),
   update: (id, data) => api.put(`/jamaah/${id}`, data),
   delete: (id) => api.delete(`/jamaah/${id}`),
+  // Tags
+  listTags: () => api.get('/jamaah/tags'),
+  createTag: (data) => api.post('/jamaah/tags', data),
+  updateTag: (id, data) => api.put(`/jamaah/tags/${id}`, data),
+  deleteTag: (id) => api.delete(`/jamaah/tags/${id}`),
 }
 
 // Family API

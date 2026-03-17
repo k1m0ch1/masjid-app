@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Save, RefreshCw, Plus, Shield, Trash2 } from 'lucide-react'
 import api, { userAccessAPI } from '../services/api'
 import useAuthStore from '../stores/useAuthStore'
+import PesanKirim from './PesanKirim'
 
 const INITIAL_FORM = {
   mosque_name: '',
@@ -74,6 +75,8 @@ const getMapEmbedUrl = (value) => {
 export default function Setting() {
   const { user } = useAuthStore()
   const isAdmin = user?.role === 'admin'
+  const allowedModules = user?.allowed_modules || []
+  const hasPesan = allowedModules.includes('pesan_kirim')
 
   const [form, setForm] = useState(INITIAL_FORM)
   const [activeTab, setActiveTab] = useState('profile')
@@ -325,6 +328,19 @@ export default function Setting() {
               }`}
             >
               Manajemen Akses User
+            </button>
+          )}
+          {hasPesan && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('pesan')}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                activeTab === 'pesan'
+                  ? 'bg-white border border-gray-200 border-b-white text-gray-900'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Pesan
             </button>
           )}
         </div>
@@ -888,6 +904,8 @@ export default function Setting() {
           )}
         </div>
       )}
+
+      {activeTab === 'pesan' && <PesanKirim />}
     </div>
   )
 }

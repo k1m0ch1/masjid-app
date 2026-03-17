@@ -1,11 +1,16 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Plus, Edit, Trash2, CheckCircle, Clock, RefreshCw, Calculator } from 'lucide-react'
-import { zakatFitrahAPI } from '../services/api'
+import { zakatFitrahAPI, jamaahAPI } from '../services/api'
 import ZakatFitrahModal from './ZakatFitrahModal'
 
 const BERAS_PER_JIWA_KG = 2.5
 
-const ZakatFitrahTab = ({ jamaahList = [] }) => {
+const ZakatFitrahTab = () => {
+  const [jamaahList, setJamaahList] = useState([])
+
+  useEffect(() => {
+    jamaahAPI.list({ limit: 500 }).then(r => setJamaahList(r.data)).catch(() => {})
+  }, [])
   const currentYear = String(new Date().getFullYear())
 
   const [year, setYear] = useState(currentYear)

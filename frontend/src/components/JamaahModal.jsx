@@ -1,5 +1,12 @@
 import { useState, useEffect } from 'react'
-import { X } from 'lucide-react'
+import { X, Plus, Tag } from 'lucide-react'
+import { jamaahAPI } from '../services/api'
+
+const TAG_PALETTE = [
+  '#10B981', '#3B82F6', '#8B5CF6', '#F59E0B',
+  '#EF4444', '#14B8A6', '#6366F1', '#F97316',
+  '#EC4899', '#64748B',
+]
 
 const JamaahModal = ({ isOpen, onClose, onSubmit, jamaah = null }) => {
   const [formData, setFormData] = useState({
@@ -33,6 +40,12 @@ const JamaahModal = ({ isOpen, onClose, onSubmit, jamaah = null }) => {
 
   const [selectedSkills, setSelectedSkills] = useState([])
   const [selectedNeeds, setSelectedNeeds] = useState([])
+  const [availableTags, setAvailableTags] = useState([])
+  const [selectedTagIds, setSelectedTagIds] = useState([])
+  const [newTagName, setNewTagName] = useState('')
+  const [newTagColor, setNewTagColor] = useState(TAG_PALETTE[0])
+  const [showNewTagForm, setShowNewTagForm] = useState(false)
+  const [tagLoading, setTagLoading] = useState(false)
 
   const defaultForm = {
     full_name: '', phone: '', email: '', address: '', gender: 'male',
@@ -41,6 +54,11 @@ const JamaahModal = ({ isOpen, onClose, onSubmit, jamaah = null }) => {
     monthly_honorarium: 0, bank_account: '', is_active: true,
     join_date: new Date().toISOString().split('T')[0], notes: '',
   }
+
+  useEffect(() => {
+    if (!isOpen) return
+    jamaahAPI.listTags().then(r => setAvailableTags(r.data)).catch(() => {})
+  }, [isOpen])
 
   useEffect(() => {
     if (jamaah) {
@@ -60,11 +78,16 @@ const JamaahModal = ({ isOpen, onClose, onSubmit, jamaah = null }) => {
       })
       setSelectedSkills(jamaah.skills || [])
       setSelectedNeeds(jamaah.needs || [])
+      setSelectedTagIds((jamaah.tags || []).map(t => t.id))
     } else {
       setFormData(defaultForm)
       setSelectedSkills([])
       setSelectedNeeds([])
+      setSelectedTagIds([])
     }
+    setShowNewTagForm(false)
+    setNewTagName('')
+    setNewTagColor(TAG_PALETTE[0])
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jamaah, isOpen])
 
@@ -74,7 +97,32 @@ const JamaahModal = ({ isOpen, onClose, onSubmit, jamaah = null }) => {
       ...formData,
       skills: selectedSkills,
       needs: selectedNeeds,
+      tag_ids: selectedTagIds,
     })
+  }
+
+  const toggleTagId = (id) => {
+    setSelectedTagIds(prev =>
+      prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]
+    )
+  }
+
+  const handleCreateTag = async () => {
+    if (!newTagName.trim()) return
+    setTagLoading(true)
+    try {
+      const res = await jamaahAPI.createTag({ name: newTagName.trim(), color: newTagColor })
+      const created = res.data
+      setAvailableTags(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)))
+      setSelectedTagIds(prev => [...prev, created.id])
+      setNewTagName('')
+      setNewTagColor(TAG_PALETTE[0])
+      setShowNewTagForm(false)
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Gagal membuat tag')
+    } finally {
+      setTagLoading(false)
+    }
   }
 
   const handleChange = (e) => {
@@ -426,6 +474,81 @@ const JamaahModal = ({ isOpen, onClose, onSubmit, jamaah = null }) => {
                   </div>
                 </div>
               )}
+
+              {/* Tag */}
+              <div className="mb-6">
+                <h4 className="text-md font-semibold text-gray-900 mb-4 border-b pb-2 flex items-center gap-2">
+                  <Tag className="h-4 w-4 text-gray-500" />
+                  Tag
+                </h4>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {availableTags.map(tag => (
+                    <button
+                      key={tag.id}
+                      type="button"
+                      onClick={() => toggleTagId(tag.id)}
+                      className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all border-2"
+                      style={
+                        selectedTagIds.includes(tag.id)
+                          ? { backgroundColor: tag.color, borderColor: tag.color, color: '#fff' }
+                          : { backgroundColor: '#f3f4f6', borderColor: 'transparent', color: '#374151' }
+                      }
+                    >
+                      {tag.name}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setShowNewTagForm(v => !v)}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-dashed border-2 border-dashed border-gray-300 text-gray-500 hover:border-green-400 hover:text-green-600 transition-colors flex items-center gap-1"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Tag Baru
+                  </button>
+                </div>
+
+                {showNewTagForm && (
+                  <div className="flex flex-wrap items-center gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <input
+                      type="text"
+                      placeholder="Nama tag..."
+                      value={newTagName}
+                      onChange={e => setNewTagName(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleCreateTag())}
+                      className="flex-1 min-w-[120px] px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                    <div className="flex gap-1.5 flex-wrap">
+                      {TAG_PALETTE.map(c => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setNewTagColor(c)}
+                          className="w-6 h-6 rounded-full transition-transform hover:scale-110"
+                          style={{
+                            backgroundColor: c,
+                            outline: newTagColor === c ? `3px solid ${c}` : 'none',
+                            outlineOffset: '2px',
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleCreateTag}
+                      disabled={tagLoading || !newTagName.trim()}
+                      className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors"
+                    >
+                      {tagLoading ? '...' : 'Buat'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowNewTagForm(false); setNewTagName('') }}
+                      className="px-3 py-1.5 text-gray-500 hover:text-gray-700 text-sm"
+                    >
+                      Batal
+                    </button>
+                  </div>
+                )}
+              </div>
 
               {/* Catatan */}
               <div className="mb-4">

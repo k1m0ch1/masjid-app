@@ -123,7 +123,7 @@ const ZiswafModal = ({ isOpen, onClose, onSubmit, record = null, jamaahList = []
     e.preventDefault()
     const isWakafAset = formData.type === 'wakaf_aset'
     if (!formData.is_anonymous && !formData.jamaah_id && !formData.donor_name.trim()) {
-      alert('Isi nama donatur atau pilih jamaah, atau centang Anonim')
+      alert('Isi nama donatur atau pilih jamaah, atau centang Hamba Allah')
       return
     }
     if (!isWakafAset && !formData.amount) {
@@ -198,7 +198,7 @@ const ZiswafModal = ({ isOpen, onClose, onSubmit, record = null, jamaahList = []
                     onChange={handleChange}
                     className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
                   />
-                  <label htmlFor="is_anonymous" className="text-sm text-gray-600">Anonim</label>
+                  <label htmlFor="is_anonymous" className="text-sm text-gray-600">Hamba Allah</label>
                 </div>
                 {!formData.is_anonymous && (
                   <>

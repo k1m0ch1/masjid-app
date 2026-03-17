@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime, date
 from app.db.session import get_db
 from app.models.user import User
-from app.models.jamaah import Jamaah, Family, ZakatFitrah
+from app.models.jamaah import Jamaah, Family, ZakatFitrah, JamaahTag
 from app.models.finance import Transaction, TransactionType
 from app.schemas.jamaah import (
     JamaahCreate,
@@ -19,10 +19,69 @@ from app.schemas.jamaah import (
     ZakatFitrahUpdate,
     ZakatFitrahResponse,
     ZakatFitrahSummary,
+    TagResponse,
+    TagCreate,
+    TagUpdate,
 )
 from app.api.v1.auth import require_module
 
 router = APIRouter()
+
+
+# ─── Tags ───────────────────────────────────────────────────────────────────────
+# NOTE: /jamaah/tags must be declared BEFORE /jamaah/{jamaah_id}
+
+@router.get("/jamaah/tags", response_model=List[TagResponse])
+async def list_tags(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_module("jamaah")),
+):
+    return db.query(JamaahTag).order_by(JamaahTag.name).all()
+
+
+@router.post("/jamaah/tags", response_model=TagResponse, status_code=status.HTTP_201_CREATED)
+async def create_tag(
+    data: TagCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_module("jamaah")),
+):
+    if db.query(JamaahTag).filter(JamaahTag.name == data.name).first():
+        raise HTTPException(status_code=400, detail="Tag dengan nama ini sudah ada")
+    tag = JamaahTag(**data.model_dump(), created_by=current_user.id)
+    db.add(tag)
+    db.commit()
+    db.refresh(tag)
+    return tag
+
+
+@router.put("/jamaah/tags/{tag_id}", response_model=TagResponse)
+async def update_tag(
+    tag_id: UUID,
+    data: TagUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_module("jamaah")),
+):
+    tag = db.query(JamaahTag).filter(JamaahTag.id == tag_id).first()
+    if not tag:
+        raise HTTPException(status_code=404, detail="Tag not found")
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(tag, field, value)
+    db.commit()
+    db.refresh(tag)
+    return tag
+
+
+@router.delete("/jamaah/tags/{tag_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_tag(
+    tag_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_module("jamaah")),
+):
+    tag = db.query(JamaahTag).filter(JamaahTag.id == tag_id).first()
+    if not tag:
+        raise HTTPException(status_code=404, detail="Tag not found")
+    db.delete(tag)
+    db.commit()
 
 
 # ─── Jamaah ────────────────────────────────────────────────────────────────────
@@ -34,10 +93,11 @@ async def list_jamaah(
     search: Optional[str] = None,
     role: Optional[str] = None,
     is_active: Optional[bool] = None,
+    tag_id: Optional[UUID] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_module("jamaah")),
 ):
-    query = db.query(Jamaah)
+    query = db.query(Jamaah).options(joinedload(Jamaah.tags))
 
     if search:
         query = query.filter(
@@ -51,6 +111,8 @@ async def list_jamaah(
         query = query.filter(Jamaah.role == role)
     if is_active is not None:
         query = query.filter(Jamaah.is_active == is_active)
+    if tag_id:
+        query = query.filter(Jamaah.tags.any(JamaahTag.id == tag_id))
 
     return [JamaahResponse.model_validate(j) for j in query.offset(skip).limit(limit).all()]
 
@@ -61,8 +123,14 @@ async def create_jamaah(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_module("jamaah")),
 ):
-    db_jamaah = Jamaah(**jamaah.model_dump())
+    data = jamaah.model_dump(exclude={"tag_ids"})
+    db_jamaah = Jamaah(**data)
     db.add(db_jamaah)
+
+    if jamaah.tag_ids:
+        tags = db.query(JamaahTag).filter(JamaahTag.id.in_(jamaah.tag_ids)).all()
+        db_jamaah.tags = tags
+
     db.commit()
     db.refresh(db_jamaah)
     return JamaahResponse.model_validate(db_jamaah)
@@ -74,7 +142,7 @@ async def get_jamaah(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_module("jamaah")),
 ):
-    jamaah = db.query(Jamaah).filter(Jamaah.id == jamaah_id).first()
+    jamaah = db.query(Jamaah).options(joinedload(Jamaah.tags)).filter(Jamaah.id == jamaah_id).first()
     if not jamaah:
         raise HTTPException(status_code=404, detail="Jamaah not found")
     return JamaahResponse.model_validate(jamaah)
@@ -87,12 +155,19 @@ async def update_jamaah(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_module("jamaah")),
 ):
-    jamaah = db.query(Jamaah).filter(Jamaah.id == jamaah_id).first()
+    jamaah = db.query(Jamaah).options(joinedload(Jamaah.tags)).filter(Jamaah.id == jamaah_id).first()
     if not jamaah:
         raise HTTPException(status_code=404, detail="Jamaah not found")
 
-    for field, value in jamaah_update.model_dump(exclude_unset=True).items():
+    update_data = jamaah_update.model_dump(exclude_unset=True)
+    tag_ids = update_data.pop("tag_ids", None)
+
+    for field, value in update_data.items():
         setattr(jamaah, field, value)
+
+    if tag_ids is not None:
+        tags = db.query(JamaahTag).filter(JamaahTag.id.in_(tag_ids)).all()
+        jamaah.tags = tags
 
     db.commit()
     db.refresh(jamaah)

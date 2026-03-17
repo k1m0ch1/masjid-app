@@ -1,10 +1,19 @@
-from sqlalchemy import Column, String, Date, DateTime, Enum, ForeignKey, Text, Boolean, Numeric, Integer
+from sqlalchemy import Column, String, Date, DateTime, Enum, ForeignKey, Text, Boolean, Numeric, Integer, Table
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy.orm import relationship
 from datetime import datetime, date
 import uuid
 import enum
 from app.db.session import Base
+
+
+# Many-to-many association: jamaah ↔ tags
+jamaah_tag_association = Table(
+    "jamaah_tag_associations",
+    Base.metadata,
+    Column("jamaah_id", UUID(as_uuid=True), ForeignKey("jamaah.id", ondelete="CASCADE"), primary_key=True),
+    Column("tag_id", UUID(as_uuid=True), ForeignKey("jamaah_tags.id", ondelete="CASCADE"), primary_key=True),
+)
 
 
 class Gender(str, enum.Enum):
@@ -94,9 +103,27 @@ class Jamaah(Base):
     family = relationship("Family", back_populates="members", foreign_keys=[family_id])
     zakat_fitrah = relationship("ZakatFitrah", back_populates="jamaah", cascade="all, delete-orphan")
     ziswaf_transactions = relationship("ZiswafTransaction", back_populates="jamaah")
+    tags = relationship("JamaahTag", secondary=jamaah_tag_association, back_populates="jamaah_members")
 
     def __repr__(self):
         return f"<Jamaah {self.full_name}>"
+
+
+class JamaahTag(Base):
+    """Custom label/tag that can be assigned to multiple jamaah."""
+    __tablename__ = "jamaah_tags"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String, nullable=False, unique=True, index=True)
+    color = Column(String, nullable=False, default="#6B7280")  # hex color
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+    jamaah_members = relationship("Jamaah", secondary=jamaah_tag_association, back_populates="tags")
+
+    def __repr__(self):
+        return f"<JamaahTag {self.name}>"
 
 
 class Family(Base):

@@ -5,6 +5,28 @@ from decimal import Decimal
 from app.models.jamaah import Gender, JamaahRole, EconomicStatus, ZakatFitrahPaymentType
 
 
+# ─── Tag ───────────────────────────────────────────────────────────────────────
+
+class TagResponse(BaseModel):
+    id: UUID4
+    name: str
+    color: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class TagCreate(BaseModel):
+    name: str
+    color: str = "#6B7280"
+
+
+class TagUpdate(BaseModel):
+    name: Optional[str] = None
+    color: Optional[str] = None
+
+
 # ─── Jamaah ────────────────────────────────────────────────────────────────────
 
 class JamaahBase(BaseModel):
@@ -40,6 +62,7 @@ class JamaahBase(BaseModel):
 
 class JamaahCreate(JamaahBase):
     family_id: Optional[UUID4] = None
+    tag_ids: Optional[List[UUID4]] = []
 
 
 class JamaahUpdate(BaseModel):
@@ -72,12 +95,14 @@ class JamaahUpdate(BaseModel):
     is_active: Optional[bool] = None
     join_date: Optional[date] = None
     notes: Optional[str] = None
+    tag_ids: Optional[List[UUID4]] = None
 
 
 class JamaahResponse(JamaahBase):
     id: UUID4
     user_id: Optional[UUID4] = None
     family_id: Optional[UUID4] = None
+    tags: List[TagResponse] = []
     created_at: datetime
     updated_at: datetime
 

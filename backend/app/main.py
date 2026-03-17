@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from app.core.config import settings
-from app.api.v1 import auth, jamaah, finance, events, ziswaf, whatsapp, setting, user_access
+from app.api.v1 import auth, jamaah, finance, events, ziswaf, whatsapp, setting, user_access, upload
 from app.api.v1.whatsapp import run_scheduler
 from app.db.session import engine, Base
 
@@ -128,6 +128,7 @@ app.include_router(ziswaf.router, prefix=settings.API_V1_PREFIX, tags=["ZISWAF"]
 app.include_router(whatsapp.router, prefix=settings.API_V1_PREFIX, tags=["WhatsApp"])
 app.include_router(setting.router, prefix=settings.API_V1_PREFIX, tags=["Settings"])
 app.include_router(user_access.router, prefix=settings.API_V1_PREFIX, tags=["User Access"])
+app.include_router(upload.router, prefix=settings.API_V1_PREFIX, tags=["Upload"])
 
 
 if __name__ == "__main__":

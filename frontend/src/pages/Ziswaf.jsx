@@ -177,7 +177,7 @@ export default function Ziswaf() {
             <tbody className="divide-y divide-gray-100">
               {records.map(r => {
                 const meta = TYPE_META[r.type] || {}
-                const donorLabel = r.is_anonymous ? 'Anonim' : (r.resolved_donor_name || r.donor_name || '-')
+                const donorLabel = r.is_anonymous ? 'Hamba Allah' : (r.resolved_donor_name || r.donor_name || '-')
                 return (
                   <tr key={r.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{formatDate(r.transaction_date)}</td>

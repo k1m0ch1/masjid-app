@@ -1,0 +1,47 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy backend files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: 194.233.94.36
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "backend/"
+          target: /root/workspace/masjid-app/
+          strip_components: 0
+
+      - name: Build and restart container
+        uses: appleboy/ssh-action@v1
+        with:
+          host: 194.233.94.36
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            cd /root/workspace/masjid-app/backend
+
+            docker build -t dai-app-backend:latest .
+
+            docker rm -f api-masjid || true
+            docker run -d \
+              --name api-masjid \
+              --restart unless-stopped \
+              -p 8002:8000 \
+              --env-file .env \
+              -v /root/workspace/masjid-app/backend/uploads:/app/uploads \
+              dai-app-backend:latest
+
+            echo "✅ Deploy success"
