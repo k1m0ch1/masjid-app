@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://masjid.yggdrasil.id"><img src="https://img.shields.io/badge/Live-masjid.yggdrasil.id-22c55e?style=flat-square&logo=cloudflare" alt="Live" /></a>
+  <a href="https://masjid.daaralihsan.com"><img src="https://img.shields.io/badge/Live-masjid.daaralihsan.com-22c55e?style=flat-square&logo=cloudflare" alt="Live" /></a>
   <img src="https://img.shields.io/badge/Python-3.12+-3b82f6?style=flat-square&logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/React-19-61dafb?style=flat-square&logo=react&logoColor=black" alt="React" />
   <img src="https://img.shields.io/badge/FastAPI-0.115-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" />

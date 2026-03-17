@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
 from typing import List, Optional
@@ -34,10 +34,19 @@ router = APIRouter()
 
 @router.get("/jamaah/tags", response_model=List[TagResponse])
 async def list_tags(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_module("jamaah")),
 ):
-    return db.query(JamaahTag).order_by(JamaahTag.name).all()
+    cache_key = cache.make_key(cache._get_client_ip(request), "list_tags", {}, domain="jamaah")
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    tags = db.query(JamaahTag).order_by(JamaahTag.name).all()
+    result = [TagResponse.model_validate(t) for t in tags]
+    await cache.set(cache_key, [r.model_dump() for r in result])
+    return result
 
 
 @router.post("/jamaah/tags", response_model=TagResponse, status_code=status.HTTP_201_CREATED)
@@ -52,6 +61,7 @@ async def create_tag(
     db.add(tag)
     db.commit()
     db.refresh(tag)
+    await cache.queue_invalidation(domain="jamaah")
     return tag
 
 
@@ -69,6 +79,7 @@ async def update_tag(
         setattr(tag, field, value)
     db.commit()
     db.refresh(tag)
+    await cache.queue_invalidation(domain="jamaah")
     return tag
 
 
@@ -83,12 +94,14 @@ async def delete_tag(
         raise HTTPException(status_code=404, detail="Tag not found")
     db.delete(tag)
     db.commit()
+    await cache.queue_invalidation(domain="jamaah")
 
 
 # ─── Jamaah ────────────────────────────────────────────────────────────────────
 
 @router.get("/jamaah", response_model=List[JamaahResponse])
 async def list_jamaah(
+    request: Request,
     skip: int = 0,
     limit: int = 100,
     search: Optional[str] = None,
@@ -98,6 +111,14 @@ async def list_jamaah(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_module("jamaah")),
 ):
+    # Cache only by pagination (skip/limit), ignore filters since client-side handles them
+    params = {"skip": skip, "limit": limit}
+    cache_key = cache.make_key(cache._get_client_ip(request), "list_jamaah", params, domain="jamaah")
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    # Load all jamaah (backend still supports filters for other clients if needed)
     query = db.query(Jamaah).options(joinedload(Jamaah.tags))
 
     if search:
@@ -115,7 +136,10 @@ async def list_jamaah(
     if tag_id:
         query = query.filter(Jamaah.tags.any(JamaahTag.id == tag_id))
 
-    return [JamaahResponse.model_validate(j) for j in query.offset(skip).limit(limit).all()]
+    jamaah_list = query.offset(skip).limit(limit).all()
+    result = [JamaahResponse.model_validate(j) for j in jamaah_list]
+    await cache.set(cache_key, [r.model_dump() for r in result])
+    return result
 
 
 @router.post("/jamaah", response_model=JamaahResponse, status_code=status.HTTP_201_CREATED)
@@ -134,19 +158,28 @@ async def create_jamaah(
 
     db.commit()
     db.refresh(db_jamaah)
+    await cache.queue_invalidation(domain="jamaah")
     return JamaahResponse.model_validate(db_jamaah)
 
 
 @router.get("/jamaah/{jamaah_id}", response_model=JamaahResponse)
 async def get_jamaah(
+    request: Request,
     jamaah_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_module("jamaah")),
 ):
+    cache_key = cache.make_key(cache._get_client_ip(request), "get_jamaah", {"id": str(jamaah_id)}, domain="jamaah")
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     jamaah = db.query(Jamaah).options(joinedload(Jamaah.tags)).filter(Jamaah.id == jamaah_id).first()
     if not jamaah:
         raise HTTPException(status_code=404, detail="Jamaah not found")
-    return JamaahResponse.model_validate(jamaah)
+    result = JamaahResponse.model_validate(jamaah)
+    await cache.set(cache_key, result.model_dump())
+    return result
 
 
 @router.put("/jamaah/{jamaah_id}", response_model=JamaahResponse)
@@ -172,6 +205,7 @@ async def update_jamaah(
 
     db.commit()
     db.refresh(jamaah)
+    await cache.queue_invalidation(domain="jamaah")
     return JamaahResponse.model_validate(jamaah)
 
 
@@ -186,19 +220,29 @@ async def delete_jamaah(
         raise HTTPException(status_code=404, detail="Jamaah not found")
     db.delete(jamaah)
     db.commit()
+    await cache.queue_invalidation(domain="jamaah")
 
 
 # ─── Family ────────────────────────────────────────────────────────────────────
 
 @router.get("/families", response_model=List[FamilyResponse])
 async def list_families(
+    request: Request,
     skip: int = 0,
     limit: int = 100,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_module("jamaah")),
 ):
+    params = {"skip": skip, "limit": limit}
+    cache_key = cache.make_key(cache._get_client_ip(request), "list_families", params, domain="jamaah")
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     families = db.query(Family).offset(skip).limit(limit).all()
-    return [FamilyResponse.model_validate(f) for f in families]
+    result = [FamilyResponse.model_validate(f) for f in families]
+    await cache.set(cache_key, [r.model_dump() for r in result])
+    return result
 
 
 @router.post("/families", response_model=FamilyResponse, status_code=status.HTTP_201_CREATED)
@@ -211,6 +255,7 @@ async def create_family(
     db.add(db_family)
     db.commit()
     db.refresh(db_family)
+    await cache.queue_invalidation(domain="jamaah")
     return FamilyResponse.model_validate(db_family)
 
 
@@ -228,15 +273,23 @@ async def get_family(
 
 @router.get("/families/{family_id}/members", response_model=List[JamaahResponse])
 async def get_family_members(
+    request: Request,
     family_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_module("jamaah")),
 ):
+    cache_key = cache.make_key(cache._get_client_ip(request), "get_family_members", {"id": str(family_id)}, domain="jamaah")
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     family = db.query(Family).filter(Family.id == family_id).first()
     if not family:
         raise HTTPException(status_code=404, detail="Family not found")
     members = db.query(Jamaah).filter(Jamaah.family_id == family_id).all()
-    return [JamaahResponse.model_validate(m) for m in members]
+    result = [JamaahResponse.model_validate(m) for m in members]
+    await cache.set(cache_key, [r.model_dump() for r in result])
+    return result
 
 
 # ─── Zakat Fitrah ──────────────────────────────────────────────────────────────
@@ -244,11 +297,17 @@ async def get_family_members(
 
 @router.get("/zakat-fitrah/summary", response_model=ZakatFitrahSummary)
 async def zakat_fitrah_summary(
+    request: Request,
     year: str = Query(default=str(datetime.now().year)),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_module("jamaah")),
 ):
     """Aggregate stats for zakat fitrah in a given year."""
+    cache_key = cache.make_key(cache._get_client_ip(request), "zakat_fitrah_summary", {"year": year}, domain="jamaah")
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     records = db.query(ZakatFitrah).filter(ZakatFitrah.year == year).all()
 
     total_jiwa = sum(r.jumlah_jiwa for r in records)
@@ -257,7 +316,7 @@ async def zakat_fitrah_summary(
     total_beras_kg = float(sum(r.amount_beras_kg or 0 for r in paid_records))
     total_uang_idr = float(sum(r.amount_uang or 0 for r in paid_records))
 
-    return ZakatFitrahSummary(
+    result = ZakatFitrahSummary(
         year=year,
         total_records=len(records),
         total_jiwa=total_jiwa,
@@ -267,10 +326,13 @@ async def zakat_fitrah_summary(
         total_beras_kg=total_beras_kg,
         total_uang_idr=total_uang_idr,
     )
+    await cache.set(cache_key, result.model_dump())
+    return result
 
 
 @router.get("/zakat-fitrah", response_model=List[ZakatFitrahResponse])
 async def list_zakat_fitrah(
+    request: Request,
     year: Optional[str] = None,
     jamaah_id: Optional[UUID] = None,
     is_paid: Optional[bool] = None,
@@ -279,6 +341,13 @@ async def list_zakat_fitrah(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_module("jamaah")),
 ):
+    # Cache by pagination + year only (most common filter), client-side handles rest
+    params = {"skip": skip, "limit": limit, "year": year}
+    cache_key = cache.make_key(cache._get_client_ip(request), "list_zakat_fitrah", params, domain="jamaah")
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     query = db.query(ZakatFitrah)
     if year:
         query = query.filter(ZakatFitrah.year == year)
@@ -287,7 +356,10 @@ async def list_zakat_fitrah(
     if is_paid is not None:
         query = query.filter(ZakatFitrah.is_paid == is_paid)
 
-    return [ZakatFitrahResponse.model_validate(r) for r in query.offset(skip).limit(limit).all()]
+    records = query.offset(skip).limit(limit).all()
+    result = [ZakatFitrahResponse.model_validate(r) for r in records]
+    await cache.set(cache_key, [r.model_dump() for r in result])
+    return result
 
 
 @router.post("/zakat-fitrah", response_model=ZakatFitrahResponse, status_code=status.HTTP_201_CREATED)
@@ -300,7 +372,7 @@ async def create_zakat_fitrah(
     db.add(record)
     db.commit()
     db.refresh(record)
-    await cache.queue_invalidation()
+    await cache.queue_invalidation(domain="jamaah")
     return ZakatFitrahResponse.model_validate(record)
 
 
@@ -332,7 +404,7 @@ async def update_zakat_fitrah(
 
     db.commit()
     db.refresh(record)
-    await cache.queue_invalidation()
+    await cache.queue_invalidation(domain="jamaah")
     return ZakatFitrahResponse.model_validate(record)
 
 
@@ -352,7 +424,8 @@ async def delete_zakat_fitrah(
     ).delete()
     db.delete(record)
     db.commit()
-    await cache.queue_invalidation()
+    await cache.queue_invalidation(domain="jamaah")
+    await cache.queue_invalidation(domain="finance")  # Also invalidate finance cache
 
 
 @router.post("/zakat-fitrah/{record_id}/pay", response_model=ZakatFitrahResponse)
@@ -401,5 +474,6 @@ async def mark_zakat_paid(
         db.add(trx)
         db.commit()
 
-    await cache.queue_invalidation()
+    await cache.queue_invalidation(domain="jamaah")
+    await cache.queue_invalidation(domain="finance")  # Also invalidate finance cache
     return ZakatFitrahResponse.model_validate(record)

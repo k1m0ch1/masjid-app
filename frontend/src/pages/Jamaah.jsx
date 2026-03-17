@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Plus, Search, Edit, Trash2, Phone, Briefcase, RefreshCw, Tag } from 'lucide-react'
 import JamaahModal from '../components/JamaahModal'
 import { jamaahAPI } from '../services/api'
@@ -20,12 +20,9 @@ const Jamaah = () => {
   const fetchJamaah = useCallback(async () => {
     setLoading(true)
     setError(null)
-    setVisibleCount(INITIAL_VISIBLE_JAMAAH)
     try {
-      const params = { search: search || undefined, limit: 500 }
-      if (roleFilter !== 'all') params.role = roleFilter
-      if (tagFilter !== 'all') params.tag_id = tagFilter
-      const res = await jamaahAPI.list(params)
+      // Load all jamaah once, no filters (let client-side handle filtering)
+      const res = await jamaahAPI.list({ limit: 500 })
       setJamaahList(res.data)
     } catch (err) {
       setError('Gagal memuat data jamaah. Pastikan backend berjalan.')
@@ -33,7 +30,7 @@ const Jamaah = () => {
     } finally {
       setLoading(false)
     }
-  }, [search, roleFilter, tagFilter])
+  }, [])
 
   useEffect(() => {
     fetchJamaah()
@@ -42,6 +39,38 @@ const Jamaah = () => {
   useEffect(() => {
     jamaahAPI.listTags().then(r => setAllTags(r.data)).catch(() => {})
   }, [])
+
+  // Client-side filtering (no API call on filter change)
+  const filteredJamaah = useMemo(() => {
+    let result = jamaahList
+
+    // Filter by search (name, phone, email)
+    if (search.trim()) {
+      const searchLower = search.toLowerCase()
+      result = result.filter(j =>
+        j.full_name?.toLowerCase().includes(searchLower) ||
+        j.phone?.toLowerCase().includes(searchLower) ||
+        j.email?.toLowerCase().includes(searchLower)
+      )
+    }
+
+    // Filter by role
+    if (roleFilter !== 'all') {
+      result = result.filter(j => j.role === roleFilter)
+    }
+
+    // Filter by tag
+    if (tagFilter !== 'all') {
+      result = result.filter(j => j.tags?.some(t => t.id === tagFilter))
+    }
+
+    return result
+  }, [jamaahList, search, roleFilter, tagFilter])
+
+  // Reset visible count when filters change
+  useEffect(() => {
+    setVisibleCount(INITIAL_VISIBLE_JAMAAH)
+  }, [search, roleFilter, tagFilter])
 
   const handleAdd = () => {
     setSelectedJamaah(null)
@@ -117,14 +146,14 @@ const Jamaah = () => {
     new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount)
 
   const sdmRoles = ['imam', 'muadzin', 'marbot']
-  const visibleJamaah = jamaahList.slice(0, visibleCount)
-  const canLoadMoreJamaah = visibleCount < jamaahList.length
+  const visibleJamaah = filteredJamaah.slice(0, visibleCount)
+  const canLoadMoreJamaah = visibleCount < filteredJamaah.length
 
   const stats = {
-    total: jamaahList.length,
-    sdm: jamaahList.filter(j => sdmRoles.includes(j.role)).length,
-    pengurus: jamaahList.filter(j => ['pengurus', 'bendahara', 'ketua'].includes(j.role)).length,
-    butuhBantuan: jamaahList.filter(j => j.needs && j.needs.length > 0).length,
+    total: filteredJamaah.length,
+    sdm: filteredJamaah.filter(j => sdmRoles.includes(j.role)).length,
+    pengurus: filteredJamaah.filter(j => ['pengurus', 'bendahara', 'ketua'].includes(j.role)).length,
+    butuhBantuan: filteredJamaah.filter(j => j.needs && j.needs.length > 0).length,
   }
 
   return (

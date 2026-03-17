@@ -1,7 +1,19 @@
-# Environment files
+# Environment files (NEVER COMMIT THESE!)
 .env
 .env.local
 .env.*.local
+.env.production
+backend/.env
+backend/.env.local
+backend/.env.production
+frontend/.env
+frontend/.env.local
+frontend/.env.production
+
+# Keep example files
+!.env.example
+!backend/.env.example
+!frontend/.env.example
 
 .venv/*
 .venv

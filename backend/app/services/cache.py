@@ -1,12 +1,16 @@
 """
-Redis-backed finance cache.
+Redis-backed multi-domain cache.
 
-Cache key : finance:data:{md5(client_ip + endpoint + sorted_params)}
-Invalidation queue : finance:inv_queue  (Redis list, rpush producer / blpop worker)
+Cache key pattern: {domain}:data:{md5(client_ip + endpoint + sorted_params)}
+Invalidation queue: {domain}:inv_queue (Redis list, rpush producer / blpop worker)
 
-On any write to transactions / ziswaf / zakat-fitrah, call queue_invalidation().
-The background worker (cache_worker.py) drains the queue and flushes all
-finance:data:* keys via SCAN so every client re-fetches fresh data.
+Supported domains:
+- finance: transactions, budgets, ziswaf, financial summaries
+- jamaah: congregation members, families, tags, zakat fitrah
+
+On any write operation, call queue_invalidation(domain="...").
+The background worker (cache_worker.py) drains queues and flushes all
+{domain}:data:* keys via SCAN so every client re-fetches fresh data.
 """
 
 import hashlib
@@ -63,10 +67,10 @@ async def init_cache() -> bool:
         return False
 
 
-def make_key(client_ip: str, endpoint: str, params: dict) -> str:
+def make_key(client_ip: str, endpoint: str, params: dict, domain: str = "finance") -> str:
     """Stable cache key from (IP, endpoint name, query params)."""
     raw = f"{client_ip}:{endpoint}:{json.dumps(params, sort_keys=True, default=str)}"
-    return "finance:data:" + hashlib.md5(raw.encode()).hexdigest()
+    return f"{domain}:data:" + hashlib.md5(raw.encode()).hexdigest()
 
 
 def _get_client_ip(request) -> str:
@@ -97,11 +101,18 @@ async def set(key: str, value: Any, ttl: int = 1800) -> None:
         pass
 
 
-async def queue_invalidation() -> None:
-    """Enqueue a full finance-cache flush (non-blocking, fire-and-forget)."""
+async def queue_invalidation(domain: str = "finance") -> None:
+    """Enqueue a domain cache flush (non-blocking, fire-and-forget).
+
+    Args:
+        domain: Cache domain to invalidate ("finance", "jamaah", etc.)
+    """
     if not CACHE_AVAILABLE:
         return
     try:
-        await get_client().rpush("finance:inv_queue", json.dumps({"action": "flush_all"}))
+        await get_client().rpush(
+            f"{domain}:inv_queue",
+            json.dumps({"action": "flush_all", "domain": domain})
+        )
     except Exception:
         pass

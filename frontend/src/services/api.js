@@ -27,16 +27,44 @@ api.interceptors.request.use(
 // Response interceptor for error handling
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     if (error.response?.status === 401) {
+      // Clear all localStorage
       localStorage.removeItem('access_token')
       localStorage.removeItem('user')
+
+      // Clear all sessionStorage
+      sessionStorage.clear()
+
+      // Clear Supabase session & cookies
+      try {
+        await supabase.auth.signOut({ scope: 'local' })
+      } catch (e) {
+        console.error('Failed to clear Supabase session:', e)
+      }
+
+      // Clear service worker caches (auth cache)
+      if ('caches' in window) {
+        try {
+          const cacheNames = await caches.keys()
+          const authCaches = cacheNames.filter(name =>
+            name.includes('auth') || name.includes('supabase-auth')
+          )
+          await Promise.all(authCaches.map(name => caches.delete(name)))
+        } catch (e) {
+          console.error('Failed to clear caches:', e)
+        }
+      }
+
       // Immediately clear auth state so ProtectedRoute redirects to /login
-      // (don't wait for async signOut — prevents infinite loading in PWA/TWA)
       import('../stores/useAuthStore').then(({ default: useAuthStore }) => {
         useAuthStore.setState({ user: null, session: null, loading: false })
       })
-      supabase.auth.signOut().catch(() => {})
+
+      // Force reload to clear any in-memory state
+      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+        window.location.href = '/login'
+      }
     }
     return Promise.reject(error)
   }

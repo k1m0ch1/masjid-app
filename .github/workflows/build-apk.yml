@@ -1,0 +1,137 @@
+name: Build APK
+
+on:
+  push:
+    tags:
+      - 'frontend-v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/frontend-v}
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate APK from PWA
+        uses: sharadcodes/pwa-to-apk-action@v2
+        with:
+          website-url: 'https://masjid.daaralihsan.com'
+          app-name: 'MasjidApp'
+          app-short-name: 'MasjidApp'
+          app-version: ${{ steps.version.outputs.VERSION }}
+          icon-url: 'https://masjid.daaralihsan.com/pwa-512x512.png'
+          theme-color: '#16a34a'
+          background-color: '#ffffff'
+          display: 'standalone'
+          orientation: 'portrait'
+          start-url: '/'
+          package-name: 'id.k1m0ch1.masjid.daaralihsan'
+          apk-name: 'masjid-app-v${{ steps.version.outputs.VERSION }}'
+
+      - name: Verify APK exists
+        run: |
+          ls -lah *.apk || echo "No APK found"
+          find . -name "*.apk" -type f
+
+      - name: Rename APK
+        run: |
+          APK_FILE=$(find . -name "*.apk" -type f | head -n 1)
+          if [ -n "$APK_FILE" ]; then
+            mv "$APK_FILE" masjid-app-v${{ steps.version.outputs.VERSION }}.apk
+            echo "APK renamed successfully"
+          else
+            echo "ERROR: No APK file found!"
+            exit 1
+          fi
+
+      - name: Create GitHub Release
+        if: github.event_name != 'workflow_dispatch'
+        uses: softprops/action-gh-release@v1
+        with:
+          name: 'Frontend v${{ steps.version.outputs.VERSION }}'
+          body: |
+            ## 🕌 MasjidApp v${{ steps.version.outputs.VERSION }}
+
+            ### 📦 Download APK
+            Download file **`masjid-app-v${{ steps.version.outputs.VERSION }}.apk`** di bawah untuk install di Android.
+
+            ### 🌐 Web/PWA Version
+            Akses langsung via browser: **https://masjid.daaralihsan.com**
+
+            Install as PWA:
+            - **Android Chrome**: Menu (⋮) → "Install app"
+            - **iOS Safari**: Share → "Add to Home Screen"
+            - **Desktop**: Click install icon in address bar
+
+            ### ✨ Features
+            - ✅ Manajemen Jamaah & Keluarga
+            - ✅ Keuangan (Pemasukan/Pengeluaran)
+            - ✅ ZISWAF & Zakat Fitrah
+            - ✅ Event & Kegiatan
+            - ✅ Kirim Pesan WhatsApp
+            - ✅ Mode Offline (PWA Cache)
+            - ✅ Multi-domain Redis Cache
+
+            ### 📝 Changelog
+            - Release v${{ steps.version.outputs.VERSION }}
+            - URL bar removed in APK mode (fullscreen)
+            - 401 auto-logout with session clearing
+            - Version number in footer
+            - Client-side filtering for Jamaah page
+
+            ### 🔧 Technical Details
+            - **Build:** ${{ github.event.head_commit.timestamp }}
+            - **Commit:** [`${{ github.sha }}`](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+
+            ---
+            💚 Built with Claude Code
+          files: |
+            masjid-app-v${{ steps.version.outputs.VERSION }}.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: masjid-app-v${{ steps.version.outputs.VERSION }}-apk
+          path: masjid-app-v${{ steps.version.outputs.VERSION }}.apk
+          retention-days: 90
+
+      - name: Summary
+        run: |
+          echo "### ✅ APK Build Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.version.outputs.VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "**File:** masjid-app-v${{ steps.version.outputs.VERSION }}.apk" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Download from:" >> $GITHUB_STEP_SUMMARY
+          echo "- GitHub Release (if tag push)" >> $GITHUB_STEP_SUMMARY
+          echo "- Or workflow artifacts above" >> $GITHUB_STEP_SUMMARY
