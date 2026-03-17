@@ -3,13 +3,13 @@ name: Build APK
 on:
   push:
     tags:
-      - 'frontend-v*.*.*'
+      - "frontend-v*.*.*"
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version number (e.g., 1.0.0)'
+        description: "Version number (e.g., 1.0.0)"
         required: true
-        default: '1.0.0'
+        default: "1.0.0"
 
 permissions:
   contents: write
@@ -36,23 +36,23 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
 
       - name: Generate APK from PWA
-        uses: sharadcodes/pwa-to-apk-action@v2
+        uses: sharadcodes/pwa-to-apk-action@v1.0.0
         with:
-          website-url: 'https://masjid.daaralihsan.com'
-          app-name: 'MasjidApp'
-          app-short-name: 'MasjidApp'
+          website-url: "https://masjid.daaralihsan.com"
+          app-name: "MasjidApp"
+          app-short-name: "MasjidApp"
           app-version: ${{ steps.version.outputs.VERSION }}
-          icon-url: 'https://masjid.daaralihsan.com/pwa-512x512.png'
-          theme-color: '#16a34a'
-          background-color: '#ffffff'
-          display: 'standalone'
-          orientation: 'portrait'
-          start-url: '/'
-          package-name: 'id.k1m0ch1.masjid.daaralihsan'
-          apk-name: 'masjid-app-v${{ steps.version.outputs.VERSION }}'
+          icon-url: "https://masjid.daaralihsan.com/pwa-512x512.png"
+          theme-color: "#16a34a"
+          background-color: "#ffffff"
+          display: "standalone"
+          orientation: "portrait"
+          start-url: "/"
+          package-name: "id.k1m0ch1.masjid.daaralihsan"
+          apk-name: "masjid-app-v${{ steps.version.outputs.VERSION }}"
 
       - name: Verify APK exists
         run: |
@@ -74,7 +74,7 @@ jobs:
         if: github.event_name != 'workflow_dispatch'
         uses: softprops/action-gh-release@v1
         with:
-          name: 'Frontend v${{ steps.version.outputs.VERSION }}'
+          name: "Frontend v${{ steps.version.outputs.VERSION }}"
           body: |
             ## 🕌 MasjidApp v${{ steps.version.outputs.VERSION }}
 
