@@ -9,12 +9,17 @@ from app.core.config import settings
 from app.api.v1 import auth, jamaah, finance, events, ziswaf, whatsapp, setting, user_access, upload
 from app.api.v1.whatsapp import run_scheduler
 from app.db.session import engine, Base
+from app.services import cache
+from app.services.cache_worker import run_cache_worker
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Start WA message queue scheduler
+    # Init Redis cache (non-fatal if unavailable)
+    await cache.init_cache()
+    # Start WA message queue scheduler + cache invalidation worker
     task = asyncio.create_task(run_scheduler())
+    cache_task = asyncio.create_task(run_cache_worker())
 
     # Run DB migrations
     with engine.connect() as conn:
@@ -85,6 +90,7 @@ async def lifespan(app: FastAPI):
 
     yield
     task.cancel()
+    cache_task.cancel()
 
 
 app = FastAPI(

@@ -31,7 +31,11 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('access_token')
       localStorage.removeItem('user')
-      // Let Supabase signOut trigger onAuthStateChange → React Router handles redirect
+      // Immediately clear auth state so ProtectedRoute redirects to /login
+      // (don't wait for async signOut — prevents infinite loading in PWA/TWA)
+      import('../stores/useAuthStore').then(({ default: useAuthStore }) => {
+        useAuthStore.setState({ user: null, session: null, loading: false })
+      })
       supabase.auth.signOut().catch(() => {})
     }
     return Promise.reject(error)

@@ -2,7 +2,7 @@ import os
 import uuid as uuid_module
 import csv
 import io
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
@@ -27,6 +27,7 @@ from app.schemas.finance import (
     FinancialSummary,
 )
 from app.api.v1.auth import require_module
+from app.services import cache
 
 router = APIRouter()
 
@@ -37,6 +38,7 @@ UPLOADS_DIR = "uploads/receipts"
 
 @router.get("/transactions", response_model=List[TransactionResponse])
 async def list_transactions(
+    request: Request,
     skip: int = 0,
     limit: int = 100,
     transaction_type: Optional[str] = None,
@@ -50,6 +52,15 @@ async def list_transactions(
     if date_only:
         start_date = date_only
         end_date = date_only
+
+    params = {
+        "skip": skip, "limit": limit, "transaction_type": transaction_type,
+        "start_date": str(start_date), "end_date": str(end_date),
+    }
+    cache_key = cache.make_key(cache._get_client_ip(request), "list_transactions", params)
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
 
     query = db.query(Transaction)
 
@@ -69,7 +80,9 @@ async def list_transactions(
         .limit(limit)
         .all()
     )
-    return [TransactionResponse.model_validate(t) for t in transactions]
+    result = [TransactionResponse.model_validate(t) for t in transactions]
+    await cache.set(cache_key, [r.model_dump() for r in result])
+    return result
 
 
 @router.post("/transactions", response_model=TransactionResponse, status_code=status.HTTP_201_CREATED)
@@ -86,6 +99,7 @@ async def create_transaction(
     db.add(db_transaction)
     db.commit()
     db.refresh(db_transaction)
+    await cache.queue_invalidation()
     return TransactionResponse.model_validate(db_transaction)
 
 
@@ -103,6 +117,7 @@ async def create_income(
     db.add(db_transaction)
     db.commit()
     db.refresh(db_transaction)
+    await cache.queue_invalidation()
     return TransactionResponse.model_validate(db_transaction)
 
 
@@ -120,6 +135,7 @@ async def create_expense(
     db.add(db_transaction)
     db.commit()
     db.refresh(db_transaction)
+    await cache.queue_invalidation()
     return TransactionResponse.model_validate(db_transaction)
 
 
@@ -160,6 +176,7 @@ async def update_transaction(
 
     db.commit()
     db.refresh(transaction)
+    await cache.queue_invalidation()
     return TransactionResponse.model_validate(transaction)
 
 
@@ -179,6 +196,7 @@ async def delete_transaction(
 
     db.delete(transaction)
     db.commit()
+    await cache.queue_invalidation()
     return None
 
 
@@ -208,6 +226,7 @@ async def approve_transaction(
 
 @router.get("/finance/summary", response_model=FinancialSummary)
 async def get_financial_summary(
+    request: Request,
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
     db: Session = Depends(get_db),
@@ -220,6 +239,14 @@ async def get_financial_summary(
 
     if not end_date:
         end_date = date.today()
+
+    cache_key = cache.make_key(
+        cache._get_client_ip(request), "finance_summary",
+        {"start_date": str(start_date), "end_date": str(end_date)},
+    )
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
 
     income_sum = db.query(func.sum(Transaction.amount)).filter(
         and_(
@@ -237,13 +264,15 @@ async def get_financial_summary(
         )
     ).scalar() or Decimal(0)
 
-    return FinancialSummary(
+    result = FinancialSummary(
         total_income=income_sum,
         total_expense=expense_sum,
         balance=income_sum - expense_sum,
         period_start=start_date,
         period_end=end_date,
     )
+    await cache.set(cache_key, result.model_dump())
+    return result
 
 
 # ─── Receipt upload ───────────────────────────────────────────────────────────

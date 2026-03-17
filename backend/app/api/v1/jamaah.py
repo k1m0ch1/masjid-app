@@ -24,6 +24,7 @@ from app.schemas.jamaah import (
     TagUpdate,
 )
 from app.api.v1.auth import require_module
+from app.services import cache
 
 router = APIRouter()
 
@@ -299,6 +300,7 @@ async def create_zakat_fitrah(
     db.add(record)
     db.commit()
     db.refresh(record)
+    await cache.queue_invalidation()
     return ZakatFitrahResponse.model_validate(record)
 
 
@@ -330,6 +332,7 @@ async def update_zakat_fitrah(
 
     db.commit()
     db.refresh(record)
+    await cache.queue_invalidation()
     return ZakatFitrahResponse.model_validate(record)
 
 
@@ -349,6 +352,7 @@ async def delete_zakat_fitrah(
     ).delete()
     db.delete(record)
     db.commit()
+    await cache.queue_invalidation()
 
 
 @router.post("/zakat-fitrah/{record_id}/pay", response_model=ZakatFitrahResponse)
@@ -397,4 +401,5 @@ async def mark_zakat_paid(
         db.add(trx)
         db.commit()
 
+    await cache.queue_invalidation()
     return ZakatFitrahResponse.model_validate(record)

@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     R2_BUCKET_NAME: str = "masjid-app"
     R2_PUBLIC_URL: str = ""  # e.g. https://pub-xxx.r2.dev or custom domain
 
+    # Redis (finance cache)
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_PASSWORD: str = ""
+    REDIS_DB: int = 0
+
     # CORS
     ALLOWED_ORIGINS: str = "http://localhost:3000"
 

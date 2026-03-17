@@ -2,9 +2,8 @@ name: Deploy Backend
 
 on:
   push:
-    branches: [main]
-    paths:
-      - 'backend/**'
+    tags:
+      - 'backend-v*.*.*'
   workflow_dispatch:
 
 jobs:
@@ -13,10 +12,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Extract version tag
+        id: tag
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=backend-v0.0.0-manual" >> $GITHUB_OUTPUT
+          fi
+
       - name: Copy backend files to server
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: 194.233.94.36
+          host: ${{ secrets.SSH_HOST }}
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: "backend/"
@@ -26,14 +34,15 @@ jobs:
       - name: Build and restart container
         uses: appleboy/ssh-action@v1
         with:
-          host: 194.233.94.36
+          host: ${{ secrets.SSH_HOST }}
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: VERSION
           script: |
             set -e
             cd /root/workspace/masjid-app/backend
 
-            docker build -t dai-app-backend:latest .
+            docker build -t dai-app-backend:$VERSION -t dai-app-backend:latest .
 
             docker rm -f api-masjid || true
             docker run -d \
@@ -42,6 +51,8 @@ jobs:
               -p 8002:8000 \
               --env-file .env \
               -v /root/workspace/masjid-app/backend/uploads:/app/uploads \
-              dai-app-backend:latest
+              dai-app-backend:$VERSION
 
-            echo "✅ Deploy success"
+            echo "✅ Deploy success: $VERSION"
+        env:
+          VERSION: ${{ steps.tag.outputs.VERSION }}

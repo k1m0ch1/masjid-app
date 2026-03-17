@@ -13,6 +13,7 @@ from app.models.finance import Transaction, TransactionType
 from app.schemas.ziswaf import ZiswafCreate, ZiswafUpdate, ZiswafResponse, ZiswafTypeSummary, ZiswafSummary
 from app.api.v1.auth import require_module
 from app.models.user import User
+from app.services import cache
 
 router = APIRouter()
 
@@ -107,7 +108,7 @@ def list_ziswaf(
 
 
 @router.post("/ziswaf", response_model=ZiswafResponse, status_code=201)
-def create_ziswaf(
+async def create_ziswaf(
     data: ZiswafCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_module("ziswaf")),
@@ -119,6 +120,7 @@ def create_ziswaf(
     # Sync to finance
     _sync_to_finance(trx, db, current_user.id)
     db.commit()
+    await cache.queue_invalidation()
     return _to_response(trx, db)
 
 
@@ -173,7 +175,7 @@ def get_ziswaf(
 
 
 @router.put("/ziswaf/{record_id}", response_model=ZiswafResponse)
-def update_ziswaf(
+async def update_ziswaf(
     record_id: uuid.UUID,
     data: ZiswafUpdate,
     db: Session = Depends(get_db),
@@ -190,11 +192,12 @@ def update_ziswaf(
     _delete_finance_for_ziswaf(record_id, db)
     _sync_to_finance(trx, db, current_user.id)
     db.commit()
+    await cache.queue_invalidation()
     return _to_response(trx, db)
 
 
 @router.delete("/ziswaf/{record_id}", status_code=204)
-def delete_ziswaf(
+async def delete_ziswaf(
     record_id: uuid.UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_module("ziswaf")),
@@ -206,6 +209,7 @@ def delete_ziswaf(
     _delete_finance_for_ziswaf(record_id, db)
     db.delete(trx)
     db.commit()
+    await cache.queue_invalidation()
 
 
 @router.post("/ziswaf/{record_id}/verify", response_model=ZiswafResponse)
