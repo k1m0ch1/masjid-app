@@ -92,9 +92,6 @@ export default defineConfig({
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^\/api/, /^\/_/, /^\/uploads/, /^\/\.well-known/],
 
-        // Offline page
-        offlineFallback: 'offline.html',
-
         // Clean up old caches on SW update
         cleanupOutdatedCaches: true,
         skipWaiting: true,
